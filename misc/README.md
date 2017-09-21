@@ -2,7 +2,7 @@
 
 The original pipeline is described in the following paper:
 
-Francioli et al, Whole-genome sequence variation, population structure and demographic history of the Dutch population, 
+Francioli et al, *Whole-genome sequence variation, population structure and demographic history of the Dutch population*, 
 [doi:10.1038/ng.3021](http://www.nature.com/ng/journal/v46/n8/full/ng.3021.html) 
 
 ### Part 1 
