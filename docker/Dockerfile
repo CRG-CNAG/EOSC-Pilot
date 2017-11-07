@@ -67,5 +67,7 @@ RUN wget -q 'https://downloads.sourceforge.net/project/picard/picard-tools/1.32/
 # Install FastQC 0.7.0
 # 
 RUN wget -q --no-check-certificate https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.7.0.zip \
- && unzip fastqc_* 
+ && unzip fastqc_* \
+ && chmod +x /FastQC/fastqc \
+ && ln -s /FastQC/fastqc /usr/local/bin/fastqc
  
