@@ -1,16 +1,39 @@
+/*
+ * Copyright (c) 2017, Centre for Genomic Regulation (CRG).
+ *
+ *   This file is part of 'EOSC-Pilot': 
+ *   A Nextflow pipeline for Variant Calling with NGS data
+ *
+ *   EOSC-Pilot is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   EOSC-Pilot is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with EOSC-Pilot.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 /* 
- * authors:
+ * EOSC-Pilot project 
+ * 
+ * Authors:
  * 
  * Nino Spataro <nino.spataro@crg.eu>
  * Paolo Di Tommaso <paolo.ditommaso@crg.eu>
  */
 
+params.index = 'data/test/fastq/GonlSamplesToFilesTest.txt'
+params.test = false
+params.platform = 'illumina'
+
 params.gatk = '/gatk-1.1'
 params.R_resources = "${params.gatk}/public/R" 
 params.picard = '/picard-tools-1.32'
-params.platform = 'illumina'
-params.index = 'GonlSamplesToFilesTest.txt'
 
 
 /* 
@@ -20,10 +43,25 @@ process '0_download' {
 
   output:
   file 'human_g1k_v37.fasta' into gen_fasta_ch
-  file '000G_phase1.indels.b37.vcf' into indels_ch 
+  file '1000G_phase1.indels.b37.vcf' into indels_ch 
   file 'dbsnp_138.b37.excluding_sites_after_129.vcf' into snp_ch
+  file 'human_g1k_v37.fasta.{bwt,amb,ann,pac,rbwt,rpac,rsa,sa}' into bwt_ch
+  file 'human_g1k_v37.dict' into dict_ch
+  file 'human_g1k_v37.fasta.fai' into gen_fai_ch 
  
   script:
+    if( params.test ) 
+    """
+    cp $baseDir/data/test/1000G_phase1.indels.b37.test.vcf 1000G_phase1.indels.b37.vcf
+    cp $baseDir/data/test/CEU.low_coverage.2010_07.genotypes.test.vcf CEU.low_coverage.2010_07.genotypes.vcf
+    cp $baseDir/data/test/dbsnp_138.b37.excluding_sites_after_129.test.vcf dbsnp_138.b37.excluding_sites_after_129.vcf
+    cp $baseDir/data/test/human_g1k_v37.test.dict human_g1k_v37.dict
+    cp $baseDir/data/test/human_g1k_v37.test.fasta human_g1k_v37.fasta
+    cp $baseDir/data/test/human_g1k_v37.test.fasta.fai human_g1k_v37.fasta.fai  
+    bwa index -a bwtsw human_g1k_v37.fasta 
+    """
+    
+    else 
     """
    	wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.fasta.gz
 	wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.dict.gz
@@ -54,25 +92,30 @@ process '0_download' {
 
 READ_FILENAME_REGEX = /^([\w]+_[\w]+_[\w]+_([\w]+)_([\w]+))_[12]$/
 
-Channel.fromPath('GonlSamplesToFilesTest.txt')
+Channel.fromPath(params.index)
        .splitCsv(sep:'\t', skip:1)
        .map{ sampleId, fileId, fullPath -> 
-          def readFile = file(fullPath)
-          def name = readFile.simpleName 
-          def regex = (name =~ READ_FILENAME_REGEX) 
-          if( !regex.matches() ) error "Invalid read pair file name format: $fullPath" 
+            def readFile = file(fullPath)
+            def name = readFile.simpleName 
+            def regex = (name =~ READ_FILENAME_REGEX) 
+            if( !regex.matches() ) 
+                error "Invalid read pair file name format: $fullPath" 
           
-          def baseName = regex.group(1)
-          def meta = [:]
-          meta.lane = regex.group(2)
-          meta.library = regex.group(3)
-          meta.sampleId = sampleId
-          meta.prefixId = "${sampleId}_${meta.lane}"
+            def baseName = regex.group(1)
+            def meta = [:]
+            meta.lane = regex.group(2)
+            meta.library = regex.group(3)
+            meta.sampleId = sampleId
+            meta.prefixId = "${sampleId}_${meta.lane}"
   
-          return tuple(baseName, meta, readFile)
-       }
-       .groupTuple(size:2, sort:true)
-       .map { base, metas, files -> assert metas[0]==metas[1]; tuple(metas[0], files[0], files[1]) }
+            tuple(baseName, meta, readFile)
+            }
+       .groupTuple(size:2)
+       .map { base, metas, files -> 
+            assert metas[0]==metas[1]; 
+            files.sort(); 
+            tuple(metas[0], files[0], files[1]) 
+            }
        .into { reads_ch1; reads_ch2; reads_ch3 }   
 
 /* 
@@ -85,7 +128,7 @@ process '1_quality_control' {
   set meta, file(read_1), file(read_2) from reads_ch1
  
   output:
-  file 'fqc{1,2}summary.{txt,log}
+  file 'fqc{1,2}summary.{txt,log}'
   file 'sample_out'
   
   script:
@@ -103,6 +146,7 @@ process '1_quality_control' {
 process '2_create_sai_files' {
   input: 
   file gen_fasta from gen_fasta_ch
+  file bwt_file from bwt_ch 
   set meta, file(read_1), file(read_2) from reads_ch2
 
   output:
@@ -122,11 +166,12 @@ process '3_align_to_genome' {
   file gen_fasta from gen_fasta_ch
   
   output: 
-  file val(meta.prefixId), file('*.bam') into bam_ch 
+  set val(prefixId), file('*.bam') into bam_ch 
   
   script:
+  prefixId = meta.prefixId
   """
-  bwa sampe -P -p ${params.platform} -i $lane -m ${meta.sampleId} -l ${meta.library} $gen_fasta $sai1 $sai2 $read_1 $read_2 | \\
+  bwa sampe -P -p ${params.platform} -i ${meta.lane} -m ${meta.sampleId} -l ${meta.library} $gen_fasta $sai1 $sai2 $read_1 $read_2 | \\
   java -Xmx4g -jar ${params.picard}/SamFormatConverter.jar INPUT=/dev/stdin OUTPUT="${meta.prefixId}.bam" VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=2000000 TMP_DIR=\$TMPDIR 
   """
 }
@@ -134,7 +179,7 @@ process '3_align_to_genome' {
 /* 
  * sorting and indexing of the bam file generated in step 3 
  */
-process '4_' {
+process '4_sort_and_index' {
   input: 
   set prefixId, file(bam_file) from bam_ch 
   
@@ -151,7 +196,7 @@ process '4_' {
 /* 
  * removing of optical duplicated from the sorted bam file and subsequent indexing of the duplicates free bam file
  */
-process '5_dedup_and_index {
+process '5_dedup_and_index' {
   input: 
   set prefixId, file(sorted_bam), file(sorted_bai) from sorted_ch
   
@@ -171,9 +216,11 @@ process '5_dedup_and_index {
  */
 process '6_realign_indels' {
   input:
-  file gen_file from gen_file_ch
+  file gen_file from gen_fasta_ch
+  file gen_fai from gen_fai_ch
   file indels from indels_ch
   file snp_file from snp_ch
+  file dict_file from dict_ch
   set prefixId, file(dedup_bam), file(dedup_bai) from dedup_ch
 
   output: 
@@ -190,7 +237,7 @@ process '6_realign_indels' {
 /* 
  * fixing mate reads and indexing of the fixed mate bam file
  */
-process '7_fixing_and_indexing {
+process '7_fixing_and_indexing' {
   input:
   set prefixId, file(realigned_bam) from realigned_ch 
   
@@ -209,7 +256,7 @@ process '7_fixing_and_indexing {
  */
 process '8_recalibrate_and_sort' {
   input:
-  file gen_file from gen_file_ch
+  file gen_file from gen_fasta_ch
   file snp_file from snp_ch
   set prefixId, file(matefixed_bam), file(matefixed_bai) from matefixed_ch
   
@@ -230,7 +277,7 @@ process '8_recalibrate_and_sort' {
  */  
 process '9_recalibrate_and_compare' {
   input:
-  file gen_file from gen_file_ch
+  file gen_file from gen_fasta_ch
   file snp_file from snp_ch
   set prefixId, file(recal_bam) from recal_ch
   set prefixId, file(matefixed_cov) from matefixed_cov_ch
