@@ -9,13 +9,11 @@ RUN apt-get update --fix-missing \
 # compile GATK 1.1 (compilation of version 1.1 works only *after* having compiled version 1.2)
 # 
 RUN wget -q -O- https://archive.apache.org/dist/ant/binaries/apache-ant-1.8.1-bin.tar.gz | tar xz  \
- && wget -q -O- https://github.com/broadgsa/gatk-protected/archive/1.2.tar.gz | tar xz \
- && wget -q -O- https://github.com/broadgsa/gatk-protected/archive/1.1.tar.gz | tar xz 
+ && wget -q -O- https://github.com/broadgsa/gatk-protected/archive/1.2.tar.gz | tar xz 
  
 ENV PATH=/apache-ant-1.8.1/bin:$PATH
 
-RUN cd /gatk-protected-1.2 && ant \
- && cd /gatk-protected-1.1 && ant 
+RUN cd /gatk-protected-1.2 && ant 
 
 #
 # main image build 
@@ -25,7 +23,7 @@ FROM debian:jessie
 #
 # copies gatk-1.1 distribution 
 #
-COPY --from=0 /gatk-protected-1.1/dist /gatk-1.1 
+COPY --from=0 /gatk-protected-1.2/dist /gatk-1.2 
  
 #
 # install Java 7 
@@ -71,3 +69,5 @@ RUN wget -q --no-check-certificate https://www.bioinformatics.babraham.ac.uk/pro
  && chmod +x /FastQC/fastqc \
  && ln -s /FastQC/fastqc /usr/local/bin/fastqc
  
+RUN wget -q https://github.com/broadgsa/gatk-protected/archive/1.2.tar.gz \
+ && tar xf 1.2.tar.gz 
