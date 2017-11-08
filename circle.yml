@@ -1,0 +1,13 @@
+achine:
+  java:
+    version: oraclejdk8
+  services:
+    - docker
+    
+test:
+  pre:
+    - curl -fsSL get.nextflow.io | bash 
+  override:
+    - ./nextflow run . 
+    - bash -x validate-ci.sh
+    

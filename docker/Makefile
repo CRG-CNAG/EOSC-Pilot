@@ -1,2 +1,2 @@
 all:
-	docker build -t eosc-pilot:1.2 . 
+	docker build -t cbcrg/eosc-pilot:1.2 . 
