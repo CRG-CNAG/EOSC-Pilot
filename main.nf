@@ -30,9 +30,9 @@
 params.index = 'data/test/fastq/GonlSamplesToFilesTest.txt'
 params.test = false
 params.platform = 'illumina'
-
-params.gatk = '/gatk-1.1'
-params.R_resources = "${params.gatk}/public/R" 
+params.output = 'results'
+params.gatk = '/gatk-1.2'
+params.R_resources = "/gatk-protected-1.2/public/R" 
 params.picard = '/picard-tools-1.32'
 
 
@@ -164,6 +164,7 @@ process '3_align_to_genome' {
   set meta, file(read_1), file(read_2) from reads_ch3
   set file(sai1), file(sai2) from sai_ch 
   file gen_fasta from gen_fasta_ch
+  file bwt_files from bwt_ch
   
   output: 
   set val(prefixId), file('*.bam') into bam_ch 
@@ -229,7 +230,7 @@ process '6_realign_indels' {
   script:
   """
   java -Xmx10g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T RealignerTargetCreator -R $gen_file -I $dedup_bam -o ${prefixId}.intervals
-  java -Xmx10g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T IndelRealigner -U ALLOW_UNINDEXED_BAM -I $dedup_bam -targetIntervals ${prefixId}.intervals -known $indels -known $snp_file -o ${prefixId}.realigned.bam -LOD 0.4 -compress 0
+  java -Xmx10g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T IndelRealigner -U ALLOW_UNINDEXED_BAM -I $dedup_bam -targetIntervals ${prefixId}.intervals -R $gen_file -known $indels -known $snp_file -o ${prefixId}.realigned.bam -LOD 0.4 -compress 0
   """ 	
 
 } 
@@ -247,7 +248,7 @@ process '7_fixing_and_indexing' {
   script:
   """
   java -Xmx4g -jar ${params.picard}/FixMateInformation.jar INPUT=$realigned_bam OUTPUT=${prefixId}.matefixed.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=SILENT TMP_DIR=\$TMPDIR 
-  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=*.matefixed.bam OUTPUT=${prefixId}.matefixed.bam.bai VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${prefixId}.matefixed.bam OUTPUT=${prefixId}.matefixed.bam.bai VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR 
   """
 }
 
@@ -255,20 +256,25 @@ process '7_fixing_and_indexing' {
  * bam recalibration and subsequent sorting and indexing
  */
 process '8_recalibrate_and_sort' {
+  publishDir params.output
+  
   input:
   file gen_file from gen_fasta_ch
   file snp_file from snp_ch
+  file dict_file from dict_ch
+  file gen_fai from gen_fai_ch
   set prefixId, file(matefixed_bam), file(matefixed_bai) from matefixed_ch
   
   output:
   set prefixId, file('*.recal.sorted.bam') into recal_ch
   set prefixId, file('*.matefixed.covariate_table.csv') into matefixed_cov_ch
+  file '*.recal.sorted.bam'
   script:
   """
   java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T CountCovariates -U ALLOW_UNINDEXED_BAM -R $gen_file -knownSites $snp_file -I $matefixed_bam -cov ReadGroupcovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile ${prefixId}.matefixed.covariate_table.csv 
   java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T TableRecalibration -U ALLOW_UNINDEXED_BAM -R $gen_file -I $matefixed_bam --recal_file *.matefixed.covariate_table.csv --out  ${prefixId}.recal.bam
-  java -Xmx4g -jar ${params.picard}/SortSam.jar INPUT=*.recal.bam OUTPUT=${prefixId}.recal.sorted.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR 
-  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=*.recal.sorted.bam OUTPUT=${prefixId}.recal.sorted.bam.bai VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.picard}/SortSam.jar INPUT=${prefixId}.recal.bam OUTPUT=${prefixId}.recal.sorted.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${prefixId}.recal.sorted.bam OUTPUT=${prefixId}.recal.sorted.bam.bai VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR 
   """
 }
 
@@ -279,6 +285,8 @@ process '9_recalibrate_and_compare' {
   input:
   file gen_file from gen_fasta_ch
   file snp_file from snp_ch
+  file dict_file from dict_ch
+  file gen_fai from gen_fai_ch
   set prefixId, file(recal_bam) from recal_ch
   set prefixId, file(matefixed_cov) from matefixed_cov_ch
 
@@ -288,7 +296,7 @@ process '9_recalibrate_and_compare' {
   mkdir After 
   java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T CountCovariates -U ALLOW_UNINDEXED_BAM -R $gen_file -knownSites $snp_file -I $recal_bam -cov ReadGroupcovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile ${prefixId}.recal.covariate_table.csv
   java -Xmx4g -jar ${params.gatk}/AnalyzeCovariates.jar -l INFO -resources ${params.R_resources} --recal_file $matefixed_cov -outputDir Before -Rscript `which R` -ignoreQ 5 
-  java -Xmx4g -jar ${params.gatk}/AnalyzeCovariates.jar -l INFO -resources ${params.R_resources} --recal_file *.recal.covariate_table.csv -outputDir After -Rscript `which R` -ignoreQ 5
+  java -Xmx4g -jar ${params.gatk}/AnalyzeCovariates.jar -l INFO -resources ${params.R_resources} --recal_file ${prefixId}.recal.covariate_table.csv -outputDir After -Rscript `which R` -ignoreQ 5
   """  
 } 
  
