@@ -9,12 +9,12 @@ To run the pipeline:
 
 1. Clone this GitHub repository: 
 
-    git clone https://github.com/CRG-CNAG/EOSC-Pilot.git 
+        git clone https://github.com/CRG-CNAG/EOSC-Pilot.git 
 
 2. Launch the execution with the following command:
 
-    cd EOSC-Pilot
-    ./nextflow run EOSC-Pilot
+        cd EOSC-Pilot
+        ./nextflow run EOSC-Pilot
     
     
 #### Dependencies 
