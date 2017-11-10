@@ -1,4 +1,4 @@
-achine:
+machine:
   java:
     version: oraclejdk8
   services:
