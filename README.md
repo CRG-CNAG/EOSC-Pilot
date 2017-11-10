@@ -2,19 +2,16 @@
 
 ## Nextflow implementation 
 
-[![nextflow](https://img.shields.io/badge/nextflow-%E2%89%A50.26.0-brightgreen.svg)](http://nextflow.io)
-[![CircleCI status](https://circleci.com/gh/CRG-CNAG/EOSC-Pilot.png?style=shield)](https://circleci.com/gh/CRG-CNAG/EOSC-Pilot/tree/master)
-
 To run the pipeline: 
 
 1. Clone this GitHub repository: 
 
-    git clone https://github.com/CRG-CNAG/EOSC-Pilot.git 
+        git clone https://github.com/CRG-CNAG/EOSC-Pilot.git 
 
 2. Launch the execution with the following command:
 
-    cd EOSC-Pilot
-    ./nextflow run EOSC-Pilot
+        cd EOSC-Pilot
+        ./nextflow run EOSC-Pilot
     
     
 #### Dependencies 
