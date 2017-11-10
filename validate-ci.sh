@@ -5,3 +5,4 @@
 # 
 [[ -s results/gonl-1a_L1.recal.sorted.bam ]] || false
 [[ -s results/gonl-1a_L7.recal.sorted.bam ]] || false
+[[ -s results/gonl-1a_L8.recal.sorted.bam ]] || false

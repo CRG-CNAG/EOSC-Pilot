@@ -22,9 +22,8 @@
  * EOSC-Pilot project 
  * 
  * Authors:
- * 
- * Nino Spataro <nino.spataro@crg.eu>
- * Paolo Di Tommaso <paolo.ditommaso@crg.eu>
+ * - Nino Spataro <nino.spataro@crg.eu>
+ * - Paolo Di Tommaso <paolo.ditommaso@crg.eu>
  */
 
 params.index = 'data/test/fastq/GonlSamplesToFilesTest.txt'
@@ -45,31 +44,32 @@ process '0_download' {
   file 'human_g1k_v37.fasta' into gen_fasta_ch
   file '1000G_phase1.indels.b37.vcf' into indels_ch 
   file 'dbsnp_138.b37.excluding_sites_after_129.vcf' into snp_ch
-  file 'human_g1k_v37.fasta.{bwt,amb,ann,pac,rbwt,rpac,rsa,sa}' into bwt_ch
+  file 'human_g1k_v37.fasta.{bwt,amb,ann,pac,rbwt,rpac,rsa,sa}' into gen_files_ch
   file 'human_g1k_v37.dict' into dict_ch
   file 'human_g1k_v37.fasta.fai' into gen_fai_ch 
  
   script:
-    if( params.test ) 
     """
-    cp $baseDir/data/test/1000G_phase1.indels.b37.test.vcf 1000G_phase1.indels.b37.vcf
-    cp $baseDir/data/test/CEU.low_coverage.2010_07.genotypes.test.vcf CEU.low_coverage.2010_07.genotypes.vcf
-    cp $baseDir/data/test/dbsnp_138.b37.excluding_sites_after_129.test.vcf dbsnp_138.b37.excluding_sites_after_129.vcf
-    cp $baseDir/data/test/human_g1k_v37.test.dict human_g1k_v37.dict
-    cp $baseDir/data/test/human_g1k_v37.test.fasta human_g1k_v37.fasta
-    cp $baseDir/data/test/human_g1k_v37.test.fasta.fai human_g1k_v37.fasta.fai  
-    bwa index -a bwtsw human_g1k_v37.fasta 
-    """
-    
-    else 
-    """
-   	wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.fasta.gz
-	wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.dict.gz
-	wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.fasta.fai.gz
-	wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.excluding_sites_after_129.vcf.gz                
-	wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/1000G_phase1.indels.b37.vcf.gz
-	wget -q ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/pilot_data/release/2010_07/low_coverage/snps/CEU.low_coverage.2010_07.genotypes.vcf.gz
-	
+    ${( !params.test ? 
+      '''
+    wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.fasta.gz
+    wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.fasta.fai.gz
+    wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.dict.gz
+    wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.excluding_sites_after_129.vcf.gz                
+    wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/1000G_phase1.indels.b37.vcf.gz
+    wget -q ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/pilot_data/release/2010_07/low_coverage/snps/CEU.low_coverage.2010_07.genotypes.vcf.gz
+      '''
+      : 
+      """
+    cp $baseDir/data/test/human_g1k_v37.fasta.gz human_g1k_v37.fasta.gz
+    cp $baseDir/data/test/human_g1k_v37.fasta.fai.gz human_g1k_v37.fasta.fai.gz 
+    cp $baseDir/data/test/human_g1k_v37.dict.gz human_g1k_v37.dict.gz
+    cp $baseDir/data/test/1000G_phase1.indels.b37.vcf.gz 1000G_phase1.indels.b37.vcf.gz
+    cp $baseDir/data/test/dbsnp_138.b37.excluding_sites_after_129.vcf.gz dbsnp_138.b37.excluding_sites_after_129.vcf.gz 
+    cp $baseDir/data/test/CEU.low_coverage.2010_07.genotypes.vcf.gz CEU.low_coverage.2010_07.genotypes.vcf.gz
+      """	
+    )}
+
 	gunzip 1000G_phase1.indels.b37.vcf.gz
     gunzip CEU.low_coverage.2010_07.genotypes.vcf.gz
     gunzip dbsnp_138.b37.excluding_sites_after_129.vcf.gz
@@ -124,6 +124,8 @@ Channel.fromPath(params.index)
  * Quality control of the fastq files
  */
 process '1_quality_control' {
+  tag "${meta.prefixId}"
+  
   input: 
   set meta, file(read_1), file(read_2) from reads_ch1
  
@@ -144,13 +146,15 @@ process '1_quality_control' {
 
 
 process '2_create_sai_files' {
+  tag "${meta.prefixId}"
+  
   input: 
   file gen_fasta from gen_fasta_ch
-  file bwt_file from bwt_ch 
+  file bwt_file from gen_files_ch 
   set meta, file(read_1), file(read_2) from reads_ch2
 
   output:
-  set file('*_1.sai'), file('*_2.sai') into sai_ch
+  set val(meta), file('*_1.sai'), file('*_2.sai') into sai_ch
   
   script:
   """
@@ -160,17 +164,18 @@ process '2_create_sai_files' {
 }
 
 process '3_align_to_genome' {
+  tag "${meta.prefixId}"
+  
   input:
-  set meta, file(read_1), file(read_2) from reads_ch3
-  set file(sai1), file(sai2) from sai_ch 
   file gen_fasta from gen_fasta_ch
-  file bwt_files from bwt_ch
+  file bwt_files from gen_files_ch
+  set meta, file(read_1), file(read_2), \
+            file(sai1), file(sai2) from reads_ch3.join(sai_ch)
   
   output: 
-  set val(prefixId), file('*.bam') into bam_ch 
+  set val(meta), file('*.bam') into bam_ch 
   
   script:
-  prefixId = meta.prefixId
   """
   bwa sampe -P -p ${params.platform} -i ${meta.lane} -m ${meta.sampleId} -l ${meta.library} $gen_fasta $sai1 $sai2 $read_1 $read_2 | \\
   java -Xmx4g -jar ${params.picard}/SamFormatConverter.jar INPUT=/dev/stdin OUTPUT="${meta.prefixId}.bam" VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=2000000 TMP_DIR=\$TMPDIR 
@@ -181,16 +186,18 @@ process '3_align_to_genome' {
  * sorting and indexing of the bam file generated in step 3 
  */
 process '4_sort_and_index' {
+  tag "${meta.prefixId}"
+  
   input: 
-  set prefixId, file(bam_file) from bam_ch 
+  set meta, file(bam_file) from bam_ch 
   
   output: 
-  set prefixId, file('*.sorted.bam'), file('*.sorted.bam.bai') into sorted_ch
+  set meta, file('*.sorted.bam'), file('*.sorted.bam.bai') into sorted_ch
   
   script:
   """
-  java -Xmx4g -jar ${params.picard}/SortSam.jar INPUT=$bam_file OUTPUT=${prefixId}.sorted.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR
-  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${prefixId}.sorted.bam OUTPUT=${prefixId}.sorted.bam.bai VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.picard}/SortSam.jar INPUT=$bam_file OUTPUT=${meta.prefixId}.sorted.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR
+  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${meta.prefixId}.sorted.bam OUTPUT=${meta.prefixId}.sorted.bam.bai VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR 
   """
 }
 
@@ -198,16 +205,18 @@ process '4_sort_and_index' {
  * removing of optical duplicated from the sorted bam file and subsequent indexing of the duplicates free bam file
  */
 process '5_dedup_and_index' {
+  tag "${meta.prefixId}"
+  
   input: 
-  set prefixId, file(sorted_bam), file(sorted_bai) from sorted_ch
+  set meta, file(sorted_bam), file(sorted_bai) from sorted_ch
   
   output: 
-  set prefixId, file ('*.dedup.bam'), file ('*.dedup.bam.bai') into dedup_ch
+  set meta, file ('*.dedup.bam'), file ('*.dedup.bam.bai') into dedup_ch
   
   script:
   """
-  java -Xmx4g -jar ${params.picard}/MarkDuplicates.jar INPUT=$sorted_bam OUTPUT=${prefixId}.dedup.bam METRICS_FILE=${prefixId}.dedup.metrics REMOVE_DUPLICATES=false ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR
-  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${prefixId}.dedup.bam OUTPUT=${prefixId}.dedup.bam.bai VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.picard}/MarkDuplicates.jar INPUT=$sorted_bam OUTPUT=${meta.prefixId}.dedup.bam METRICS_FILE=${meta.prefixId}.dedup.metrics REMOVE_DUPLICATES=false ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR
+  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${meta.prefixId}.dedup.bam OUTPUT=${meta.prefixId}.dedup.bam.bai VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR 
   """
 
 } 
@@ -216,21 +225,23 @@ process '5_dedup_and_index' {
  *  realign reads around indels
  */
 process '6_realign_indels' {
+  tag "${meta.prefixId}"
+  
   input:
   file gen_file from gen_fasta_ch
   file gen_fai from gen_fai_ch
   file indels from indels_ch
   file snp_file from snp_ch
   file dict_file from dict_ch
-  set prefixId, file(dedup_bam), file(dedup_bai) from dedup_ch
+  set meta, file(dedup_bam), file(dedup_bai) from dedup_ch
 
   output: 
-  set prefixId, file('*.realigned.bam') into realigned_ch 
+  set meta, file('*.realigned.bam') into realigned_ch 
   
   script:
   """
-  java -Xmx10g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T RealignerTargetCreator -R $gen_file -I $dedup_bam -o ${prefixId}.intervals
-  java -Xmx10g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T IndelRealigner -U ALLOW_UNINDEXED_BAM -I $dedup_bam -targetIntervals ${prefixId}.intervals -R $gen_file -known $indels -known $snp_file -o ${prefixId}.realigned.bam -LOD 0.4 -compress 0
+  java -Xmx10g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T RealignerTargetCreator -R $gen_file -I $dedup_bam -o ${meta.prefixId}.intervals
+  java -Xmx10g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T IndelRealigner -U ALLOW_UNINDEXED_BAM -I $dedup_bam -targetIntervals ${meta.prefixId}.intervals -R $gen_file -known $indels -known $snp_file -o ${meta.prefixId}.realigned.bam -LOD 0.4 -compress 0
   """ 	
 
 } 
@@ -239,16 +250,18 @@ process '6_realign_indels' {
  * fixing mate reads and indexing of the fixed mate bam file
  */
 process '7_fixing_and_indexing' {
+  tag "${meta.prefixId}"
+  
   input:
-  set prefixId, file(realigned_bam) from realigned_ch 
+  set meta, file(realigned_bam) from realigned_ch 
   
   output: 
-  set prefixId, file('*.matefixed.bam'), file('*.matefixed.bam.bai') into matefixed_ch
+  set meta, file('*.matefixed.bam'), file('*.matefixed.bam.bai') into matefixed_ch
   
   script:
   """
-  java -Xmx4g -jar ${params.picard}/FixMateInformation.jar INPUT=$realigned_bam OUTPUT=${prefixId}.matefixed.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=SILENT TMP_DIR=\$TMPDIR 
-  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${prefixId}.matefixed.bam OUTPUT=${prefixId}.matefixed.bam.bai VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.picard}/FixMateInformation.jar INPUT=$realigned_bam OUTPUT=${meta.prefixId}.matefixed.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=SILENT TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${meta.prefixId}.matefixed.bam OUTPUT=${meta.prefixId}.matefixed.bam.bai VALIDATION_STRINGENCY=LENIENT MAX_RECORDS_IN_RAM=1000000 TMP_DIR=\$TMPDIR 
   """
 }
 
@@ -256,6 +269,7 @@ process '7_fixing_and_indexing' {
  * bam recalibration and subsequent sorting and indexing
  */
 process '8_recalibrate_and_sort' {
+  tag "${meta.prefixId}"
   publishDir params.output
   
   input:
@@ -263,18 +277,18 @@ process '8_recalibrate_and_sort' {
   file snp_file from snp_ch
   file dict_file from dict_ch
   file gen_fai from gen_fai_ch
-  set prefixId, file(matefixed_bam), file(matefixed_bai) from matefixed_ch
+  set meta, file(matefixed_bam), file(matefixed_bai) from matefixed_ch
   
   output:
-  set prefixId, file('*.recal.sorted.bam') into recal_ch
-  set prefixId, file('*.matefixed.covariate_table.csv') into matefixed_cov_ch
+  set meta, file('*.recal.sorted.bam') into recal_ch
+  set meta, file('*.matefixed.covariate_table.csv') into matefixed_cov_ch
   file '*.recal.sorted.bam'
   script:
   """
-  java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T CountCovariates -U ALLOW_UNINDEXED_BAM -R $gen_file -knownSites $snp_file -I $matefixed_bam -cov ReadGroupcovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile ${prefixId}.matefixed.covariate_table.csv 
-  java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T TableRecalibration -U ALLOW_UNINDEXED_BAM -R $gen_file -I $matefixed_bam --recal_file *.matefixed.covariate_table.csv --out  ${prefixId}.recal.bam
-  java -Xmx4g -jar ${params.picard}/SortSam.jar INPUT=${prefixId}.recal.bam OUTPUT=${prefixId}.recal.sorted.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR 
-  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${prefixId}.recal.sorted.bam OUTPUT=${prefixId}.recal.sorted.bam.bai VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T CountCovariates -U ALLOW_UNINDEXED_BAM -R $gen_file -knownSites $snp_file -I $matefixed_bam -cov ReadGroupcovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile ${meta.prefixId}.matefixed.covariate_table.csv 
+  java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T TableRecalibration -U ALLOW_UNINDEXED_BAM -R $gen_file -I $matefixed_bam --recal_file *.matefixed.covariate_table.csv --out  ${meta.prefixId}.recal.bam
+  java -Xmx4g -jar ${params.picard}/SortSam.jar INPUT=${meta.prefixId}.recal.bam OUTPUT=${meta.prefixId}.recal.sorted.bam SORT_ORDER=coordinate VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR 
+  java -Xmx4g -jar ${params.picard}/BuildBamIndex.jar INPUT=${meta.prefixId}.recal.sorted.bam OUTPUT=${meta.prefixId}.recal.sorted.bam.bai VALIDATION_STRINGENCY=LENIENT TMP_DIR=\$TMPDIR 
   """
 }
 
@@ -282,21 +296,23 @@ process '8_recalibrate_and_sort' {
  * 	analysis of the recalibration process through comparison of some metrics between MateFixedBam (before recalibration) and recalSortedBam (after recalibration)
  */  
 process '9_recalibrate_and_compare' {
+  tag "${meta.prefixId}"
+  
   input:
   file gen_file from gen_fasta_ch
   file snp_file from snp_ch
   file dict_file from dict_ch
   file gen_fai from gen_fai_ch
-  set prefixId, file(recal_bam) from recal_ch
-  set prefixId, file(matefixed_cov) from matefixed_cov_ch
+  set meta, file(recal_bam) from recal_ch
+  set meta, file(matefixed_cov) from matefixed_cov_ch
 
   script:
   """
   mkdir Before
   mkdir After 
-  java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T CountCovariates -U ALLOW_UNINDEXED_BAM -R $gen_file -knownSites $snp_file -I $recal_bam -cov ReadGroupcovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile ${prefixId}.recal.covariate_table.csv
+  java -Xmx4g -jar ${params.gatk}/GenomeAnalysisTK.jar -l INFO -T CountCovariates -U ALLOW_UNINDEXED_BAM -R $gen_file -knownSites $snp_file -I $recal_bam -cov ReadGroupcovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile ${meta.prefixId}.recal.covariate_table.csv
   java -Xmx4g -jar ${params.gatk}/AnalyzeCovariates.jar -l INFO -resources ${params.R_resources} --recal_file $matefixed_cov -outputDir Before -Rscript `which R` -ignoreQ 5 
-  java -Xmx4g -jar ${params.gatk}/AnalyzeCovariates.jar -l INFO -resources ${params.R_resources} --recal_file ${prefixId}.recal.covariate_table.csv -outputDir After -Rscript `which R` -ignoreQ 5
+  java -Xmx4g -jar ${params.gatk}/AnalyzeCovariates.jar -l INFO -resources ${params.R_resources} --recal_file ${meta.prefixId}.recal.covariate_table.csv -outputDir After -Rscript `which R` -ignoreQ 5
   """  
 } 
  
