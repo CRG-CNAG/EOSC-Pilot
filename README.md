@@ -11,7 +11,7 @@ To run the pipeline:
 2. Launch the execution with the following command:
 
         cd EOSC-Pilot
-        ./nextflow run EOSC-Pilot
+        ./nextflow run main.nf
     
     
 #### Dependencies 
