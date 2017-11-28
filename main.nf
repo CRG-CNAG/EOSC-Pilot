@@ -33,13 +33,15 @@ params.output = 'results'
 params.gatk = '/gatk-1.2'
 params.R_resources = "/gatk-protected-1.2/public/R" 
 params.picard = '/picard-tools-1.32'
+params.genome = "${params.output}/genome"
 
 
 /* 
  * download human genome reference file, reference genome indexing and downloading of 1000Genomes ancillary files
  */
 process '0_download' {
-
+  storeDir params.genome
+  
   output:
   file 'human_g1k_v37.fasta' into gen_fasta_ch
   file '1000G_phase1.indels.b37.vcf' into indels_ch 
