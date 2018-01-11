@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Centre for Genomic Regulation (CRG).
+ * Copyright (c) 2017-2018, Centre for Genomic Regulation (CRG).
  *
  *   This file is part of 'EOSC-Pilot': 
  *   A Nextflow pipeline for Variant Calling with NGS data
