@@ -12,7 +12,13 @@ To run the pipeline:
 
         cd EOSC-Pilot
         ./nextflow run main.nf
-    
+
+## GoNL 3.4 implementation 
+
+This version is still under development. Use the following 
+command line to launch it: 
+
+        NXF_VER=0.28.0-RC1 nextflow run main-3.4.nf -profile gonl34        
     
 #### Dependencies 
 
@@ -31,3 +37,6 @@ To run the pipeline run `perl LaunchPipeline.pl`. This script will:
 * run the script "FromFastqToBam.pl" (this script is run on each pair of fastq files and it is able to perform the various steps to obtain the recalibrated BAM)
 * run the script "FromBamToVcf.pl" (this script is run on each sample and firstly the various BAM recalibrated files related to the same individual are merged). 
 * Subsequently variant calling is performed
+
+
+See also https://github.com/molgenis/NGS_DNA/releases
