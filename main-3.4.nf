@@ -46,7 +46,6 @@ process '0_download' {
   
   output:
   file 'human_g1k_v37.fasta' into gen_fasta_ch
-  file '1000G_phase1.indels.b37.vcf' into indels_ch 
   file 'dbsnp_138.b37.excluding_sites_after_129.vcf' into snp_ch
   file 'human_g1k_v37.fasta.{bwt,amb,ann,pac,rbwt,rpac,rsa,sa}' into gen_files_ch
   file 'human_g1k_v37.dict' into dict_ch
@@ -372,9 +371,8 @@ process '9_final_join_vcf' {
     file dict_file from dict_ch
     file (vcf_files:'merge*.vcf') from merged_vcf_ch.collect()
   output:
-    file 'final.joined.sorted.vcf'
-    file 'snp.vcf' into final_snps_ch
-    file 'indels.vcf' into final_indels_ch
+    file 'final.joined.sorted.vcf' into joined_vcf_ch1  
+    file 'final.joined.sorted.vcf' into joined_vcf_ch2
 
   script:
   def names = vcf_files.collect { "--variant $it" }.join(' ')
@@ -395,27 +393,6 @@ process '9_final_join_vcf' {
 
   #bgzip final.joined.sorted.vcf
   #tabix -p vcf final.joined.sorted.vcf.gz
-
-  java \
-    -XX:ParallelGCThreads=${task.cpus} \
-    -Xmx${task.memory?.giga?:1}g \
-    -jar ${params.gatk}/GenomeAnalysisTK.jar \
-    -T SelectVariants \
-    -R $gen_fasta \
-    --variant final.joined.sorted.vcf \
-    -o indels.vcf \
-  --selectTypeToInclude INDEL
-
-  java \
-    -XX:ParallelGCThreads=${task.cpus} \
-    -Xmx${task.memory?.giga?:1}g \
-    -jar ${params.gatk}/GenomeAnalysisTK.jar \
-    -T SelectVariants \
-    -R $gen_fasta \
-    --variant final.joined.sorted.vcf \
-    -o snp.vcf \
-    --selectTypeToExclude INDEL
-
   """
 }
 
@@ -424,19 +401,29 @@ process '10a_snps_filtering' {
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
     file dict_file from dict_ch
-    file snp_file from final_snps_ch
+    file joined_vcf_file from joined_vcf_ch1
   output:
     file 'snps.filtered.vcf' into filtered_snps_ch
     
   script:
   """
-    java \
+  java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T SelectVariants \
+    -R $gen_fasta \
+    --variant $joined_vcf_file \
+    -o snp.vcf \
+    --selectTypeToExclude SNP
+
+  java \
     -XX:ParallelGCThreads=${task.cpus} \
     -Xmx${task.memory?.giga?:1}g \
     -jar ${params.gatk}/GenomeAnalysisTK.jar \
     -T VariantFiltration \
     -R $gen_fasta \
-    --variant $snp_file \
+    --variant snp.vcf \
     -o snps.filtered.vcf \
     --filterExpression 'QD < 2.0' \
     --filterName 'filterQD' \
@@ -456,18 +443,28 @@ process '10b_indels_filtering' {
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
     file dict_file from dict_ch
-    file indels_file from final_indels_ch  
+    file joined_vcf_file from joined_vcf_ch2
   output:
     file 'indels.filtered.vcf' into filtered_indels_ch
   script:
   """
-    java \
+  java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T SelectVariants \
+    -R $gen_fasta \
+    --variant $joined_vcf_file \
+    -o indels.vcf \
+    --selectTypeToInclude INDEL
+
+  java \
     -XX:ParallelGCThreads=${task.cpus} \
     -Xmx${task.memory?.giga?:1}g \
     -jar ${params.gatk}/GenomeAnalysisTK.jar \
     -T VariantFiltration \
     -R $gen_fasta \
-    --variant $indels_file \
+    --variant indels.vcf \
     -o indels.filtered.vcf \
     --filterExpression 'QD < 2.0' \
     --filterName 'filterQD' \
@@ -478,8 +475,7 @@ process '10b_indels_filtering' {
   """
 }
 
-
-process '12_combine_filtered' {
+process '11_combine_filtered' {
   publishDir params.output
   input:
     file gen_fasta from gen_fasta_ch
