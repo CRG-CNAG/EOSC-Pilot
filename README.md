@@ -20,6 +20,10 @@ command line to launch it:
 
         NXF_VER=0.28.0-RC1 nextflow run main-3.4.nf -profile gonl34        
     
+## Execution DAG 
+
+![Execution DAG](misc/dag.png)
+
 #### Dependencies 
 
 * Java 8 
