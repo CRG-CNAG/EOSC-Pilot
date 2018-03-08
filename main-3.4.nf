@@ -26,7 +26,7 @@
  * - Paolo Di Tommaso <paolo.ditommaso@crg.eu>
  */
 
-params.index = 'data/test2/GonlSamplesToFilesTest.txt.small'
+params.index = 'data/test2/GonlSamplesToFilesTest.txt'
 params.intervals = 'data/test2/Intervals.bed'
 params.test = false
 params.platform = 'illumina'
@@ -275,6 +275,8 @@ vcf_file_ch
   .set { vcf_and_ped_files_ch }   
 
 process '6_merge_family' {
+  tag "${familyId}"
+
   input:
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
@@ -302,6 +304,8 @@ process '6_merge_family' {
 
 
 process '7_phase_by_transmission' {
+  tag "${familyId}"
+
   input:
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
@@ -342,12 +346,12 @@ process '8_merge_pbt' {
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
     file dict_file from dict_ch
-    file (pbt_files) from pbt_files_ch.collate(50).collect()
+    file (vcf_files) from pbt_files_ch.collate(50).collect()
 
   output:
     file 'merged.vcf' into merged_vcf_ch
   script:
-  def names = pbt_files.collect { "--variant $it" }.join(' ')
+  def names = vcf_files.collect { "--variant $it" }.join(' ')
   """
   java \
     -XX:ParallelGCThreads=${task.cpus} \
@@ -369,6 +373,8 @@ process '9_final_join_vcf' {
     file (vcf_files:'merge*.vcf') from merged_vcf_ch.collect()
   output:
     file 'final.joined.sorted.vcf'
+    file 'snp.vcf' into final_snps_ch
+    file 'indels.vcf' into final_indels_ch
 
   script:
   def names = vcf_files.collect { "--variant $it" }.join(' ')
@@ -413,3 +419,91 @@ process '9_final_join_vcf' {
   """
 }
 
+process '10a_snps_filtering' {
+  input:
+    file gen_fasta from gen_fasta_ch
+    file gen_fai from gen_fai_ch
+    file dict_file from dict_ch
+    file snp_file from final_snps_ch
+  output:
+    file 'snps.filtered.vcf' into filtered_snps_ch
+    
+  script:
+  """
+    java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T VariantFiltration \
+    -R $gen_fasta \
+    --variant $snp_file \
+    -o snps.filtered.vcf \
+    --filterExpression 'QD < 2.0' \
+    --filterName 'filterQD' \
+    --filterExpression 'MQ < 25.0' \
+    --filterName 'filterMQ' \
+    --filterExpression 'FS > 60.0' \
+    --filterName 'filterFS' \
+    --filterExpression 'MQRankSum < -12.5' \
+    --filterName 'filterMQRankSum' \
+    --filterExpression 'ReadPosRankSum < -8.0' \
+    --filterName 'filterReadPosRankSum'
+  """
+}
+
+process '10b_indels_filtering' {
+  input:
+    file gen_fasta from gen_fasta_ch
+    file gen_fai from gen_fai_ch
+    file dict_file from dict_ch
+    file indels_file from final_indels_ch  
+  output:
+    file 'indels.filtered.vcf' into filtered_indels_ch
+  script:
+  """
+    java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T VariantFiltration \
+    -R $gen_fasta \
+    --variant $indels_file \
+    -o indels.filtered.vcf \
+    --filterExpression 'QD < 2.0' \
+    --filterName 'filterQD' \
+    --filterExpression 'FS > 200.0' \
+    --filterName 'filterFS' \
+    --filterExpression 'ReadPosRankSum < -20.0' \
+    --filterName 'filterReadPosRankSum'
+  """
+}
+
+
+process '12_combine_filtered' {
+  publishDir params.output
+  input:
+    file gen_fasta from gen_fasta_ch
+    file gen_fai from gen_fai_ch
+    file dict_file from dict_ch
+    file indels_file from filtered_indels_ch
+    file snps_file from filtered_snps_ch  
+  output:
+    file 'joined.filtered.vcf.gz.*'
+
+  script:
+  """
+    java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T CombineVariants \
+    -R $gen_fasta \
+    --variant $snps_file \
+    --variant $indels_file \
+    --genotypemergeoption UNSORTED \
+    -o joined.filtered.vcf
+
+  bgzip -c joined.filtered.vcf > joined.filtered.vcf.gz
+  tabix -p vcf joined.filtered.vcf.gz
+  """
+}
