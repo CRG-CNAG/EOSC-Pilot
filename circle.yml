@@ -10,4 +10,5 @@ test:
   override:
     - ./nextflow run . 
     - bash -x validate-ci.sh
+    - ./nextflow run main-3.4.nf -profile gonl34
     

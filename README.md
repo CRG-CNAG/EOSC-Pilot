@@ -18,8 +18,10 @@ To run the pipeline:
 This version is still under development. Use the following 
 command line to launch it: 
 
-        NXF_VER=0.28.0-RC1 nextflow run main-3.4.nf -profile gonl34        
+        ./nextflow run main-3.4.nf -profile gonl34        
     
+Note: this requires nextflow 0.28.0 or higher 
+
 ## Execution DAG 
 
 ![Execution DAG](misc/dag.png)
