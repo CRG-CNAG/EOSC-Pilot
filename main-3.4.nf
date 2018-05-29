@@ -415,7 +415,7 @@ process '10a_snps_filtering' {
     -R $gen_fasta \
     --variant $joined_vcf_file \
     -o snp.vcf \
-    --selectTypeToExclude SNP
+    --selectTypeToExclude INDEL
 
   java \
     -XX:ParallelGCThreads=${task.cpus} \
