@@ -241,7 +241,6 @@ process '5_varcall' {
     file gen_fai from gen_fai_ch
     file snp_file from snp_ch
     file dict_file from dict_ch 
-    //file interval from intervals_file 
     set val(prefixId), file(recalibrated_table), file(dedup_bam) from recalibrate_dedup_bam_ch
 
   output:
@@ -267,13 +266,50 @@ process '5_varcall' {
   """
 }
 
+/* 
+ * group together all gvcf files within the same family 
+ * the family-id is given by the prefix-id from which is remved the last 
+ * character (eg. `gonl-25b` -> `gonl-25`)
+ */ 
+
 vcf_file_ch
   .map { prefixId, files -> tuple(prefixId[0..-2], files) }
   .groupTuple()
+  .tap { family_vcf_ch }
   .join( ped_files_ch )
   .set { vcf_and_ped_files_ch }   
 
-process '6_merge_family' {
+
+process '6_combine_vcf' {
+  tag "${familyId}"
+
+  input: 
+    file gen_fasta from gen_fasta_ch
+    file gen_fai from gen_fai_ch
+    file snp_file from snp_ch
+    file dict_file from dict_ch  
+    file intervals_file 
+    set familyId, file(vcf_files) from family_vcf_ch
+
+  output: 
+    set familyId, file('*.g.vcf') into combined_vcf_ch
+
+  script:
+  def gvcfs = vcf_files.collect { "--variant $it" }.join(' ')
+
+  """
+  java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T CombineGVCFs \
+    -R $gen_fasta \
+    --dbsnp $snp_file $gvcfs \
+    -o ${familyId}.g.vcf
+  """
+}
+
+process '7_merge_family' {
   tag "${familyId}"
 
   input:
@@ -284,8 +320,10 @@ process '6_merge_family' {
     set familyId, file(vcf_files), file(ped_file) from vcf_and_ped_files_ch
 
   output:
-    set familyId, file('*.f.vcf') into family_vcf_ch
+    set familyId, file('*.vcf') into family_merge_vcf_ch
 
+  // TODO 
+  // 1. add the cli option `-L $intervals_file` to the GenotypeGVCFs command 
   script:
   def names = vcf_files.collect { "--variant $it" }.join(' ')
   """
@@ -296,24 +334,27 @@ process '6_merge_family' {
     -T GenotypeGVCFs \
     -R $gen_fasta \
     --dbsnp $snp_file \
-    -o ${familyId}.f.vcf \
+    -o ${familyId}.vcf \
     $names
   """
 }
 
-
-process '7_phase_by_transmission' {
+process '8_phase_by_transmission' {
   tag "${familyId}"
 
   input:
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
     file dict_file from dict_ch
-    set familyId, file(family_vcf), file(ped_file) from family_vcf_ch.join(ped_files_ch2)
+    set familyId, file(family_vcf), file(ped_file) from family_merge_vcf_ch.join(ped_files_ch2)
   output: 
-    file('*.pbt.vcf') into pbt_files_ch
+    file('*.PBT.vcf') into pbt_files_ch
   script:
   """
+  awk '\$2!="${familyId}d"' $ped_file > abc.ped
+  awk '\$2!="${familyId}c"' $ped_file > abd.ped
+  
+  # process `abc.ped` file 
   java \
     -XX:ParallelGCThreads=${task.cpus} \
     -Xmx${task.memory?.giga?:1}g \
@@ -323,7 +364,7 @@ process '7_phase_by_transmission' {
     -V $family_vcf \
     --pedigreeValidationType SILENT \
     -mvf ${familyId}.ABC.mvf \
-    -ped $ped_file \
+    -ped abc.ped \
     -o ${familyId}.abc.vcf 
 
   java \
@@ -335,12 +376,49 @@ process '7_phase_by_transmission' {
     --variant ${familyId}.abc.vcf \
     -o ${familyId}.abc.filtered.vcf \
     -xl_se \\'gonl-.+d\\'  
+ 
+  if [[ `grep -c ${familyId} abd.ped ` != 3 ]]; then
+      cp ${familyId}.abc.filtered.vcf ${familyId}.PBT.vcf
+      exit 0 
+  fi     
 
-  cp ${familyId}.abc.filtered.vcf ${familyId}.pbt.vcf   
+  # process `abd.ped` file 
+  java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T PhaseByTransmission \
+    -R $gen_fasta \
+    -V $family_vcf \
+    --pedigreeValidationType SILENT \
+    -mvf ${familyId}.ABD.mvf \
+    -ped abd.ped \
+  -o ${familyId}.abd.vcf
+
+  java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T SelectVariants \
+    -R $gen_fasta \
+    --variant ${familyId}.abd.vcf \
+    -o ${familyId}.abd.filtered.vcf
+
+  java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -Xmx${task.memory?.giga?:1}g \
+    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -T CombineVariants \
+    -R $gen_fasta \
+    --variant:'' *.abc.filtered.vcf --variant:'' *.abd.filtered.vcf \
+    -o ${familyId}.PBT.vcf \
+    -genotypeMergeOptions UNIQUIFY
+
+    correction.pl ${familyId}.PBT.vcf 
   """
 }
 
-process '8_merge_pbt' {
+process '9_merge_pbt' {
   input:
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
@@ -348,7 +426,8 @@ process '8_merge_pbt' {
     file (vcf_files) from pbt_files_ch.collate(50).collect()
 
   output:
-    file 'merged.vcf' into merged_vcf_ch
+    file 'sorted.vcf' into (merged_vcf_ch1, merged_vcf_ch2)
+
   script:
   def names = vcf_files.collect { "--variant $it" }.join(' ')
   """
@@ -360,39 +439,14 @@ process '8_merge_pbt' {
     -R $gen_fasta \
     $names \
     -o merged.vcf \
-    -genotypeMergeOptions REQUIRE_UNIQUE 
-  """
-}
+    -genotypeMergeOptions UNIQUIFY
 
-process '9_final_join_vcf' {
-  input:
-    file gen_fasta from gen_fasta_ch
-    file gen_fai from gen_fai_ch
-    file dict_file from dict_ch
-    file (vcf_files:'merge*.vcf') from merged_vcf_ch.collect()
-  output:
-    file 'final.joined.sorted.vcf' into joined_vcf_ch1  
-    file 'final.joined.sorted.vcf' into joined_vcf_ch2
+    correction.pl merged.vcf  
 
-  script:
-  def names = vcf_files.collect { "--variant $it" }.join(' ')
-  """
-  java \
-    -XX:ParallelGCThreads=${task.cpus} \
-    -Xmx${task.memory?.giga?:1}g \
-    -cp ${params.gatk}/GenomeAnalysisTK.jar \
-    org.broadinstitute.gatk.tools.CatVariants \
-    -R $gen_fasta \
-    $names \
-    -out final.joined.vcf
-
-  sortVCFbyFai.pl \
-  -fastaIndexFile $gen_fai \
-  -inputVCF final.joined.vcf \
-  -outputVcf final.joined.sorted.vcf
-
-  #bgzip final.joined.sorted.vcf
-  #tabix -p vcf final.joined.sorted.vcf.gz
+    sortVCFbyFai.pl \
+      -fastaIndexFile $gen_fai \
+      -inputVCF merged.vcf \
+      -outputVcf sorted.vcf
   """
 }
 
@@ -401,7 +455,7 @@ process '10a_snps_filtering' {
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
     file dict_file from dict_ch
-    file joined_vcf_file from joined_vcf_ch1
+    file joined_vcf_file from merged_vcf_ch1
   output:
     file 'snps.filtered.vcf' into filtered_snps_ch
     
@@ -443,7 +497,7 @@ process '10b_indels_filtering' {
     file gen_fasta from gen_fasta_ch
     file gen_fai from gen_fai_ch
     file dict_file from dict_ch
-    file joined_vcf_file from joined_vcf_ch2
+    file joined_vcf_file from merged_vcf_ch2
   output:
     file 'indels.filtered.vcf' into filtered_indels_ch
   script:
