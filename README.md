@@ -13,14 +13,6 @@ To run the pipeline:
         cd EOSC-Pilot
         ./nextflow run main.nf
 
-## GoNL 3.4 implementation 
-
-This version is still under development. Use the following 
-command line to launch it: 
-
-        ./nextflow run main-3.4.nf -profile gonl34        
-    
-Note: this requires nextflow 0.28.0 or higher 
 
 ## Execution DAG 
 
