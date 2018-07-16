@@ -13,6 +13,5 @@ install:
 before_script:
 - curl -fsSL get.nextflow.io | bash 
 script:
-- ./nextflow run . 
+- ./nextflow run main.nf 
 - bash -x validate-ci.sh
-- ./nextflow run main-3.4.nf -profile gonl34

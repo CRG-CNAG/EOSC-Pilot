@@ -28,60 +28,82 @@
 
 params.index = 'data/test2/GonlSamplesToFilesTest.txt'
 params.intervals = 'data/test2/Intervals.bed'
-params.test = false
+params.genref = 'test'  
 params.platform = 'illumina'
 params.output = 'results'
 params.gatk = '/gatk-1.2'
 params.R_resources = "/gatk-protected-1.2/public/R" 
 params.picard = '/picard-tools-1.32'
-params.genome = "${params.output}/genome"
+params.genome = "${params.output}/genome/$params.genref"
 
 intervals_file = file(params.intervals)
+
+assert params.genref in ['test','v37','v38'], "Invalid `genref` parameter: $params.genref"
 
 /* 
  * download human genome reference file, reference genome indexing and downloading of 1000Genomes ancillary files
  */
 process '0_download' {
+  tag params.genref
   storeDir params.genome
   
+  // make sure there's just file matching the declared extension 
   output:
-  file 'human_g1k_v37.fasta' into gen_fasta_ch
-  file 'dbsnp_138.b37.excluding_sites_after_129.vcf' into snp_ch
-  file 'human_g1k_v37.fasta.{bwt,amb,ann,pac,rbwt,rpac,rsa,sa}' into gen_files_ch
-  file 'human_g1k_v37.dict' into dict_ch
-  file 'human_g1k_v37.fasta.fai' into gen_fai_ch 
+  file '*.fasta' into gen_fasta_ch
+  file '*.vcf' into snp_ch
+  file '*.fasta.{bwt,amb,ann,pac,rbwt,rpac,rsa,sa}' into gen_files_ch
+  file '*.dict' into dict_ch
+  file '*.fasta.fai' into gen_fai_ch 
  
   script:
+    if(params.genref=='v38')
     """
-    ${( !params.test ? 
-      '''
+    wget -q ftp://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh38p7/VCF/All_20180418.vcf.gz
+    wget -q ftp://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh38p7/VCF/All_20180418.vcf.gz.tbi 
+    wget -q ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
+    wget -q ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
+
+    java \
+    -XX:ParallelGCThreads=${task.cpus} \
+    -jar ${params.picard}/picard.jar CreateSequenceDictionary R=GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta O=GCA_000001405.15_GRCh38_no_alt_analysis_set
+
+    gunzip All_20180418.vcf.gz
+    gunzip All_20180418.vcf.gz.tbi
+    < GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai gunzip -d - > GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta.fai
+    < GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz gunzip -d - > GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta
+
+    bwa index -a bwtsw GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta
+    """
+
+    else if(params.genref=='v37') 
+    '''
     wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.fasta.gz
     wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.fasta.fai.gz
     wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/human_g1k_v37.dict.gz
     wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.excluding_sites_after_129.vcf.gz
-    wget -q ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/b37/1000G_phase1.indels.b37.vcf.gz
-    wget -q ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/pilot_data/release/2010_07/low_coverage/snps/CEU.low_coverage.2010_07.genotypes.vcf.gz
-      '''
-      : 
-      """
-    cp $baseDir/data/test/human_g1k_v37.fasta.gz human_g1k_v37.fasta.gz
-    cp $baseDir/data/test/human_g1k_v37.fasta.fai.gz human_g1k_v37.fasta.fai.gz 
-    cp $baseDir/data/test/human_g1k_v37.dict.gz human_g1k_v37.dict.gz
-    cp $baseDir/data/test/1000G_phase1.indels.b37.vcf.gz 1000G_phase1.indels.b37.vcf.gz
-    cp $baseDir/data/test/dbsnp_138.b37.excluding_sites_after_129.vcf.gz dbsnp_138.b37.excluding_sites_after_129.vcf.gz 
-    cp $baseDir/data/test/CEU.low_coverage.2010_07.genotypes.vcf.gz CEU.low_coverage.2010_07.genotypes.vcf.gz
-      """	
-    )}
 
-	gunzip 1000G_phase1.indels.b37.vcf.gz
-    gunzip CEU.low_coverage.2010_07.genotypes.vcf.gz
     gunzip dbsnp_138.b37.excluding_sites_after_129.vcf.gz
     gunzip human_g1k_v37.dict.gz
     gunzip human_g1k_v37.fasta.fai.gz
     gunzip human_g1k_v37.fasta.gz
     
-    bwa index -a bwtsw human_g1k_v37.fasta #bwt file is <fastaFile.bwt>
-    """ 
+    bwa index -a bwtsw human_g1k_v37.fasta 
+    '''
+
+    else
+    """
+    cp $baseDir/data/test/human_g1k_v37.fasta.gz human_g1k_v37.fasta.gz
+    cp $baseDir/data/test/human_g1k_v37.fasta.fai.gz human_g1k_v37.fasta.fai.gz 
+    cp $baseDir/data/test/human_g1k_v37.dict.gz human_g1k_v37.dict.gz
+    cp $baseDir/data/test/dbsnp_138.b37.excluding_sites_after_129.vcf.gz dbsnp_138.b37.excluding_sites_after_129.vcf.gz 
+
+    gunzip dbsnp_138.b37.excluding_sites_after_129.vcf.gz
+    gunzip human_g1k_v37.dict.gz
+    gunzip human_g1k_v37.fasta.fai.gz
+    gunzip human_g1k_v37.fasta.gz
+    
+    bwa index -a bwtsw human_g1k_v37.fasta 
+    """	
 }
 
 /*
