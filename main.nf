@@ -63,14 +63,13 @@ process '0_download' {
     wget -q ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
     wget -q ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
 
+    gunzip All_20180418.vcf.gz
+    < GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai gunzip -d - > GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta.fai
+    < GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz gunzip -d - > GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta
+
     java \
     -XX:ParallelGCThreads=${task.cpus} \
     -jar ${params.picard}/picard.jar CreateSequenceDictionary R=GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta O=GCA_000001405.15_GRCh38_no_alt_analysis_set
-
-    gunzip All_20180418.vcf.gz
-    gunzip All_20180418.vcf.gz.tbi
-    < GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai gunzip -d - > GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta.fai
-    < GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz gunzip -d - > GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta
 
     bwa index -a bwtsw GCA_000001405.15_GRCh38_no_alt_analysis_set.fasta
     """
