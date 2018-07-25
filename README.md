@@ -8,11 +8,14 @@ To run the pipeline:
 
         git clone https://github.com/CRG-CNAG/EOSC-Pilot.git 
 
-2. Launch the execution with the following command:
+2. Launch a execution with the following command:
 
         cd EOSC-Pilot
         ./nextflow run main.nf
 
+3. Specify the reference genome version using the command below:
+
+        ./nextflow run main.nf --genref v38
 
 ## Execution DAG 
 
