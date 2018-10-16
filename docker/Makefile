@@ -1,5 +1,5 @@
-all:
-	docker build -t cbcrg/eosc-pilot:1.2 . 
+gatk1.2:
+	docker build -t cbcrg/eosc-pilot:1.2 . -f Dockerfile-1.2
 
 gonl3.4:
 	docker build -t cbcrg/eosc-pilot:gonl3.4 . -f Dockerfile.gonl3.4
