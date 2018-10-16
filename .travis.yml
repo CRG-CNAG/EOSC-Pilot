@@ -11,7 +11,9 @@ install:
 - sudo apt-get -qq -y install graphviz realpath
 - sudo pip install awscli
 before_script:
+- $(aws ecr get-login --no-include-email --region eu-west-1)
+- docker pull 885800555707.dkr.ecr.eu-west-1.amazonaws.com/cbcrg/eosc_with_gatk3.7
 - curl -fsSL get.nextflow.io | bash 
 script:
-- ./nextflow run main.nf 
-- bash -x validate-ci.sh
+- ./nextflow run . -profile standard,travis
+
