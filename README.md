@@ -1,43 +1,70 @@
 # EOSC pilot project
 
-## Nextflow implementation 
+## Requirements 
 
-To run the pipeline: 
+* Java 8 (or later) 
+* Docker 1.10 (or later)
+* GATK 3.7 
 
-1. Clone this GitHub repository: 
+Note: This workflow is provided with a Docker with including all
+required dependencies except GATK which cannot be distributed due 
+to license restrictions. 
 
-        git clone https://github.com/CRG-CNAG/EOSC-Pilot.git 
+## Quickstart  
 
-2. Launch a execution with the following command:
+1. Download the `GenomeAnalysisTK.jar` (version 3.7) package from [this link](https://software.broadinstitute.org/gatk/download/auth?package=GATK-archive&version=3.7-0-gcfedb67), untar and save it in a path in your computer.    
 
-        cd EOSC-Pilot
-        ./nextflow run main.nf
+2. Install Nextflow with the following command: 
 
-3. Specify the reference genome version using the command below:
+        curl -s https://get.nextflow.io | bash 
 
-        ./nextflow run main.nf --genref v38
+note: you can also install it as a Conda package: 
+
+        conda install nextflow -c bioconda
+
+3. Launch a execution with test data use following command:
+
+        nextflow run CRG-CNAG/EOSC-Pilot --gatk </full/path/to/GenomeAnalysisTK.jar>
+
+## Pipeline parameters 
+
+#### --genref 
+
+Specify the reference genome. Can be either: `test`,`v37` or `v38`. 
+
+For example:
+
+        nextflow run CRG-CNAG/EOSC-Pilot --genref v38
+
+#### --index 
+
+The dataset index file. A tab separated file formatted as shown below: 
+
+```tsv
+sample_alias	file_stable_id	archive_ebi_fullpath
+gonl-16a	EGAF00000513247	data/test2/fastq/101231_I305_FC810N3ABXX_L7_HUMrutRGVDIAAPE_1.fq.gz
+gonl-16a	EGAF00000513248	data/test2/fastq/101231_I305_FC810N3ABXX_L7_HUMrutRGVDIAAPE_2.fq.gz
+gonl-16a	EGAF00000513249	data/test2/fastq/110122_I329_FC81DB5ABXX_L6_HUMrutRGVDIAAPE_1.fq.gz
+gonl-16a	EGAF00000513250	data/test2/fastq/110122_I329_FC81DB5ABXX_L6_HUMrutRGVDIAAPE_2.fq.gz
+gonl-16a	EGAF00000513251	data/test2/fastq/110105_I186_FC812MWABXX_L8_HUMrutRGVDIABPE_1.fq.gz
+```
+
+#### --intervals
+
+The *intervals* bed file.
 
 ## Execution DAG 
 
 ![Execution DAG](misc/dag.png)
 
-#### Dependencies 
+#### Components
 
-* Java 8 
-* Docker 1.10 (or higher)
-    
+This project users the following software packages or libraries 
 
-## Original implementation 
-
-
-To run the pipeline run `perl LaunchPipeline.pl`. This script will:
-
-* download the human genome reference file and index them
-* download some ancillary files produced by 1000Genomes Project from the Bundle repository of GATK
-* run-encrypt EGA deposited fastq files
-* run the script "FromFastqToBam.pl" (this script is run on each pair of fastq files and it is able to perform the various steps to obtain the recalibrated BAM)
-* run the script "FromBamToVcf.pl" (this script is run on each sample and firstly the various BAM recalibrated files related to the same individual are merged). 
-* Subsequently variant calling is performed
-
-
-See also https://github.com/molgenis/NGS_DNA/releases
+* R
+* Pcard 2.9 
+* bwa 0.7.15 
+* fastqc 0.11.5 
+* sambamba 0.6.6
+* Tabix
+* GATK 3.7 

@@ -1,21 +1,12 @@
 /*
  * Copyright (c) 2017-2018, Centre for Genomic Regulation (CRG).
  *
- *   This file is part of 'EOSC-Pilot': 
- *   A Nextflow pipeline for Variant Calling with NGS data
- *
- *   EOSC-Pilot is free software: you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation, either version 3 of the License, or
- *   (at your option) any later version.
- *
- *   EOSC-Pilot is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with EOSC-Pilot.  If not, see <http://www.gnu.org/licenses/>.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. 
+ * 
+ * This Source Code Form is "Incompatible With Secondary Licenses", as
+ * defined by the Mozilla Public License, v. 2.0.
  */
 
 /* 
@@ -31,8 +22,7 @@ params.intervals = 'data/test2/Intervals.bed'
 params.genref = 'test'  
 params.platform = 'illumina'
 params.output = 'results'
-params.gatk = '/gatk-1.2'
-params.R_resources = "/gatk-protected-1.2/public/R" 
+params.gatk = '/gatk3.7/GenomeAnalysisTK.jar'
 params.picard = '/picard-tools-1.32'
 params.genome = "${params.output}/genome/$params.genref"
 
@@ -242,7 +232,7 @@ process '4_dedup_merge' {
   sambamba markdup --nthreads=${task.cpus} --overflow-list-size 1000000 --hash-table-size 1000000 -p $merged_bam ${prefixId}.merged.dedup.bam
   java \
     -XX:ParallelGCThreads=${task.cpus} -Xmx${task.memory?.giga?:1}g \
-    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -jar ${params.gatk} \
     -T BaseRecalibrator \
     -R $gen_fasta \
     -nct 8 \
@@ -270,7 +260,7 @@ process '5_bam_recalibration' {
   java \
     -XX:ParallelGCThreads=${task.cpus} \
     -Xmx${task.memory?.giga?:1}g \
-    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -jar ${params.gatk} \
     -T BaseRecalibrator \
     -R $gen_fasta \
     -I $dedup_bam \
@@ -281,7 +271,7 @@ process '5_bam_recalibration' {
   java \
     -XX:ParallelGCThreads=${task.cpus} \
     -Xmx${task.memory?.giga?:1}g \
-    -jar ${params.gatk}/GenomeAnalysisTK.jar \
+    -jar ${params.gatk} \
     -T PrintReads \
     -R $gen_fasta \
     -I $dedup_bam \

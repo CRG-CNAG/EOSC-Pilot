@@ -5,18 +5,9 @@ RUN conda install -y -c r r-base
  
 RUN apt-get update && apt-get -y install build-essential ttf-dejavu  
 
-#
-# Install required Perl modules
-# 
-RUN wget -q cpanmin.us -O /usr/local/bin/cpanm \
-  && chmod +x /usr/local/bin/cpanm \
-  && cpanm File::Basename Cwd Getopt::Long Switch 
-
 RUN conda config --add channels defaults \
  && conda config --add channels conda-forge \
  && conda config --add channels bioconda \
  && conda install -y picard=2.9 bwa=0.7.15 fastqc=0.11.5 sambamba=0.6.6 
 
 RUN conda install -y tabix
-
-ADD GenomeAnalysisTK.jar /gatk3.7/GenomeAnalysisTK.jar
