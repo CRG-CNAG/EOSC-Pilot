@@ -1,0 +1,3 @@
+FROM biocontainers/eosc-pilot:v1.0-remastering_cv1.0
+
+ADD GenomeAnalysisTK.jar /opt/gatk3.7/GenomeAnalysisTK.jar
